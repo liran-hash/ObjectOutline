@@ -7,33 +7,731 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.10.0/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body { background: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body { background: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; }
 
-  #container { position: relative; width: 100vw; height: 100vh; }
+/* VIDEO LAYER */
+#videoWrap { position: fixed; inset: 0; z-index: 0; }
+#video { width: 100%; height: 100%; object-fit: cover; display: block; }
+#overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#drawCanvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; pointer-events: none; }
 
-  #video {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    object-fit: cover;
-    display: block;
+/* SCANLINE */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,255,180,0.018) 3px, rgba(0,255,180,0.018) 4px);
+  pointer-events: none; z-index: 999;
+}
+
+/* TOP HUD */
+#hud {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+  padding: 10px 14px 8px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.75), transparent);
+  display: flex; align-items: center; justify-content: space-between;
+  pointer-events: none;
+}
+#title { font-size: 12px; color: #00ffcc; letter-spacing: 3px; text-transform: uppercase; }
+#livePill {
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(0,0,0,0.5); border: 1px solid rgba(0,255,204,0.3);
+  border-radius: 20px; padding: 3px 10px;
+  font-size: 10px; color: #00ffcc; letter-spacing: 1px;
+}
+#liveDot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #ff4444; animation: blink 1s infinite;
+}
+#liveDot.on { background: #00ffcc; }
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:0.2} }
+
+/* TAB BAR */
+#tabBar {
+  position: fixed; top: 40px; left: 0; right: 0; z-index: 10;
+  display: flex;
+  background: rgba(0,0,0,0.7);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.tab {
+  flex: 1; padding: 9px 4px; text-align: center;
+  font-size: 11px; color: #666; cursor: pointer;
+  letter-spacing: 1px; text-transform: uppercase;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+.tab.active { color: #00ffcc; border-bottom-color: #00ffcc; }
+.tab .ticon { font-size: 16px; display: block; margin-bottom: 1px; }
+
+/* PANELS */
+.panel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 10; display: none; }
+.panel.active { display: block; }
+
+/* ── LIVE PANEL ── */
+#panelLive {
+  padding: 0 0 16px;
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 70%, transparent);
+}
+#modeBar { display: flex; gap: 8px; padding: 10px 12px 0; }
+.mode-btn {
+  flex: 1; padding: 9px 4px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(0,0,0,0.5); color: #666;
+  font-family: 'Courier New', monospace; font-size: 10px;
+  text-align: center; cursor: pointer; transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+.mode-btn.active { border-color: #00ffcc; background: rgba(0,255,204,0.12); color: #00ffcc; }
+.mode-btn .micon { font-size: 17px; display: block; margin-bottom: 2px; }
+
+/* ── FILTER PANEL ── */
+#panelFilter {
+  background: rgba(0,0,0,0.88);
+  border-top: 1px solid rgba(0,255,204,0.2);
+  padding: 16px;
+}
+.panel-title { font-size: 11px; color: #00ffcc; letter-spacing: 2px; margin-bottom: 12px; }
+.filter-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+#filterInput {
+  flex: 1; background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2); border-radius: 8px;
+  padding: 10px 12px; color: #fff;
+  font-family: 'Courier New', monospace; font-size: 13px; outline: none;
+}
+#filterInput::placeholder { color: #444; }
+.small-btn {
+  padding: 10px 14px; border-radius: 8px;
+  background: rgba(0,255,204,0.15); border: 1px solid rgba(0,255,204,0.4);
+  color: #00ffcc; font-family: 'Courier New', monospace;
+  font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  padding: 5px 10px; border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  font-size: 10px; color: #aaa; cursor: pointer;
+  transition: all 0.15s;
+}
+.chip.active { border-color: #00ffcc; background: rgba(0,255,204,0.15); color: #00ffcc; }
+
+/* ── ROBOFLOW PANEL ── */
+#panelRoboflow {
+  background: rgba(0,0,0,0.92);
+  border-top: 1px solid rgba(255,107,53,0.3);
+  padding: 16px;
+  max-height: 55vh; overflow-y: auto;
+}
+.rf-desc { font-size: 11px; color: #777; line-height: 1.6; margin-bottom: 14px; }
+.rf-desc a { color: #ff6b35; }
+.rf-input {
+  width: 100%; background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,107,53,0.3); border-radius: 8px;
+  padding: 10px 12px; color: #fff;
+  font-family: 'Courier New', monospace; font-size: 12px;
+  outline: none; margin-bottom: 8px;
+}
+.rf-input::placeholder { color: #444; }
+.orange-btn {
+  width: 100%; padding: 12px; border-radius: 8px;
+  background: rgba(255,107,53,0.2); border: 1px solid rgba(255,107,53,0.5);
+  color: #ff6b35; font-family: 'Courier New', monospace;
+  font-size: 12px; cursor: pointer; letter-spacing: 1px;
+  margin-bottom: 14px;
+}
+.rf-presets-title { font-size: 10px; color: #555; letter-spacing: 1px; margin-bottom: 8px; }
+.rf-preset {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px; border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  margin-bottom: 6px; cursor: pointer;
+  transition: all 0.15s;
+}
+.rf-preset:active { background: rgba(255,107,53,0.1); border-color: rgba(255,107,53,0.4); }
+.rf-preset-icon { font-size: 22px; flex-shrink: 0; }
+.rf-preset-info { flex: 1; }
+.rf-preset-name { font-size: 12px; color: #ddd; margin-bottom: 2px; }
+.rf-preset-desc { font-size: 10px; color: #555; line-height: 1.4; }
+.rf-status { font-size: 11px; padding: 8px; border-radius: 6px; margin-top: 8px; text-align: center; display: none; }
+.rf-status.loading { display: block; color: #ff6b35; background: rgba(255,107,53,0.1); border: 1px solid rgba(255,107,53,0.2); }
+.rf-status.error { display: block; color: #ff4444; background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.2); }
+.rf-status.ok { display: block; color: #00ffcc; background: rgba(0,255,204,0.1); border: 1px solid rgba(0,255,204,0.2); }
+
+/* ── CUSTOM PANEL ── */
+#panelCustom {
+  background: rgba(0,0,0,0.92);
+  border-top: 1px solid rgba(136,255,0,0.3);
+  padding: 16px;
+  max-height: 55vh; overflow-y: auto;
+}
+.custom-desc { font-size: 11px; color: #777; line-height: 1.6; margin-bottom: 14px; }
+.custom-desc a { color: #88ff00; }
+.file-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.file-label {
+  flex: 1; padding: 10px 12px; border-radius: 8px;
+  border: 1px dashed rgba(136,255,0,0.3);
+  background: rgba(136,255,0,0.05);
+  font-size: 11px; color: #667; cursor: pointer;
+  text-align: center; transition: all 0.15s;
+}
+.file-label.loaded { border-color: rgba(136,255,0,0.6); color: #88ff00; }
+input[type=file] { display: none; }
+.green-btn {
+  width: 100%; padding: 12px; border-radius: 8px;
+  background: rgba(136,255,0,0.15); border: 1px solid rgba(136,255,0,0.4);
+  color: #88ff00; font-family: 'Courier New', monospace;
+  font-size: 12px; cursor: pointer; letter-spacing: 1px;
+  margin-bottom: 10px;
+}
+.custom-steps {
+  font-size: 10px; color: #555; line-height: 1.9;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px; padding: 10px;
+}
+.custom-steps span { color: #88ff00; }
+
+/* HINT */
+#hint {
+  position: fixed; top: 90px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.65); border: 1px solid rgba(0,255,204,0.3);
+  border-radius: 10px; padding: 8px 16px;
+  font-size: 11px; color: #00ffcc;
+  pointer-events: none; z-index: 15; white-space: nowrap;
+  opacity: 1; transition: opacity 0.5s;
+}
+#hint.fade { opacity: 0; }
+
+/* LOADING OVERLAY */
+#loading {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.9);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px; z-index: 100;
+}
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(0,255,204,0.15);
+  border-top-color: #00ffcc; border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading p { color: #00ffcc; font-size: 12px; letter-spacing: 3px; }
+#loading small { color: #555; font-size: 10px; }
+</style>
+</head>
+<body>
+
+<!-- VIDEO -->
+<div id="videoWrap">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="overlay"></canvas>
+  <canvas id="drawCanvas"></canvas>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+  <span id="title">ObjectScan Live</span>
+  <div id="livePill"><div id="liveDot"></div><span id="liveText">LOADING</span></div>
+</div>
+
+<!-- TABS -->
+<div id="tabBar">
+  <div class="tab active" id="tab-live" onclick="switchTab('live')"><span class="ticon">📡</span>Live</div>
+  <div class="tab" id="tab-filter" onclick="switchTab('filter')"><span class="ticon">🔎</span>Filter</div>
+  <div class="tab" id="tab-roboflow" onclick="switchTab('roboflow')"><span class="ticon">🌐</span>Roboflow</div>
+  <div class="tab" id="tab-custom" onclick="switchTab('custom')"><span class="ticon">🧬</span>Custom</div>
+</div>
+
+<!-- HINT -->
+<div id="hint">Loading model...</div>
+
+<!-- PANEL: LIVE -->
+<div class="panel active" id="panelLive">
+  <div id="modeBar">
+    <div class="mode-btn active" id="btn-auto" onclick="setMode('auto')"><span class="micon">🔍</span>Auto</div>
+    <div class="mode-btn" id="btn-tap" onclick="setMode('tap')"><span class="micon">👆</span>Tap</div>
+    <div class="mode-btn" id="btn-draw" onclick="setMode('draw')"><span class="micon">✏️</span>Draw</div>
+  </div>
+</div>
+
+<!-- PANEL: FILTER -->
+<div class="panel" id="panelFilter">
+  <div class="panel-title">FILTER BY CLASS</div>
+  <div class="filter-input-row">
+    <input id="filterInput" type="text" placeholder="e.g. bottle, person, plant..." autocomplete="off" spellcheck="false">
+    <div class="small-btn" onclick="applyFilter()">SET</div>
+    <div class="small-btn" onclick="clearFilter()">ALL</div>
+  </div>
+  <div class="chips" id="chipsRow"></div>
+</div>
+
+<!-- PANEL: ROBOFLOW -->
+<div class="panel" id="panelRoboflow">
+  <div class="panel-title" style="color:#ff6b35">ROBOFLOW MODEL</div>
+  <div class="rf-desc">
+    Browse models at <a href="https://universe.roboflow.com" target="_blank">universe.roboflow.com</a> → find one → export as <b>TFjs</b> → paste the hosted URL below. Free account required.
+  </div>
+  <input class="rf-input" id="rfUrl" placeholder="https://detect.roboflow.com/your-model/1">
+  <input class="rf-input" id="rfKey" placeholder="Roboflow API key (from your account)">
+  <button class="orange-btn" onclick="loadRoboflow()">LOAD MODEL</button>
+  <div class="rf-presets-title">EXAMPLE MODELS TO TRY</div>
+  <div class="rf-preset" onclick="fillRFPreset('fruit-detection-sweet/1')">
+    <div class="rf-preset-icon">🍎</div>
+    <div class="rf-preset-info">
+      <div class="rf-preset-name">Fruit Detection</div>
+      <div class="rf-preset-desc">Apples, oranges, bananas, and more. Good starting point for produce.</div>
+    </div>
+  </div>
+  <div class="rf-preset" onclick="fillRFPreset('plant-disease-detection-using-image-processing/1')">
+    <div class="rf-preset-icon">🌿</div>
+    <div class="rf-preset-info">
+      <div class="rf-preset-name">Plant Disease Detection</div>
+      <div class="rf-preset-desc">Detects common leaf diseases. Relevant for field scouting.</div>
+    </div>
+  </div>
+  <div class="rf-preset" onclick="fillRFPreset('tomato-disease-nxd1h/1')">
+    <div class="rf-preset-icon">🍅</div>
+    <div class="rf-preset-info">
+      <div class="rf-preset-name">Tomato Disease</div>
+      <div class="rf-preset-desc">Tomato leaf disease classification — blight, mosaic, mold, etc.</div>
+    </div>
+  </div>
+  <div class="rf-preset" onclick="fillRFPreset('pepper-disease/1')">
+    <div class="rf-preset-icon">🫑</div>
+    <div class="rf-preset-info">
+      <div class="rf-preset-name">Pepper Disease</div>
+      <div class="rf-preset-desc">Pepper plant disease detection model.</div>
+    </div>
+  </div>
+  <div id="rfStatus" class="rf-status"></div>
+</div>
+
+<!-- PANEL: CUSTOM -->
+<div class="panel" id="panelCustom">
+  <div class="panel-title" style="color:#88ff00">CUSTOM TRAINED MODEL</div>
+  <div class="custom-desc">
+    Train your own model on <a href="https://roboflow.com" target="_blank">roboflow.com</a> or Google Colab, export as <b>TensorFlow.js</b>, then load the files here.
+  </div>
+  <div class="file-row">
+    <label class="file-label" id="labelJson" for="fileJson">📄 model.json</label>
+    <input type="file" id="fileJson" accept=".json" onchange="fileLoaded('json', this)">
+  </div>
+  <div class="file-row">
+    <label class="file-label" id="labelWeights" for="fileWeights">📦 weights.bin (can be multiple)</label>
+    <input type="file" id="fileWeights" accept=".bin" multiple onchange="fileLoaded('weights', this)">
+  </div>
+  <div class="file-row">
+    <label class="file-label" id="labelLabels" for="fileLabels">🏷 labels.txt (one per line)</label>
+    <input type="file" id="fileLabels" accept=".txt,.json" onchange="fileLoaded('labels', this)">
+  </div>
+  <button class="green-btn" onclick="loadCustomModel()">LOAD CUSTOM MODEL</button>
+  <div class="custom-steps">
+    <span>How to train your own:</span><br>
+    1. Collect 50–200 photos of your object<br>
+    2. Label at roboflow.com (free tier)<br>
+    3. Train → Export as TensorFlow.js<br>
+    4. Download the zip → load files here
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner"></div>
+  <p>LOADING MODEL</p>
+  <small>~10 sec on first load</small>
+</div>
+
+<script>
+// ── STATE ──
+var video = document.getElementById('video');
+var overlay = document.getElementById('overlay');
+var drawCanvas = document.getElementById('drawCanvas');
+var ctx = overlay.getContext('2d');
+var dctx = drawCanvas.getContext('2d');
+
+var cocoModel = null;
+var activeModel = null; // what's currently running
+var activeModelType = null; // 'coco' | 'roboflow' | 'custom'
+var detections = [];
+var mode = 'auto';
+var currentTab = 'live';
+var filterClasses = []; // empty = show all
+var tappedBox = null;
+var isDrawing = false, drawStart = {}, drawBox = null;
+
+// Roboflow
+var rfModelObj = null;
+var rfApiKey = '';
+
+// Custom
+var customModelObj = null;
+var customLabels = [];
+var customFiles = { json: null, weights: null, labels: null };
+
+// Colors
+var PALETTE = ['#00ffcc','#ff6b35','#ffdd00','#ff4dff','#4dffff','#ff4d4d','#88ff00','#ff88cc'];
+var labelColors = {};
+function getColor(label) {
+  if (!labelColors[label]) labelColors[label] = PALETTE[Object.keys(labelColors).length % PALETTE.length];
+  return labelColors[label];
+}
+
+// COCO classes for chips
+var COCO_CLASSES = ['person','bicycle','car','motorcycle','airplane','bus','train','truck','boat',
+  'traffic light','fire hydrant','stop sign','parking meter','bench','bird','cat','dog','horse',
+  'sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','tie','suitcase',
+  'frisbee','skis','snowboard','sports ball','kite','bottle','wine glass','cup','fork','knife',
+  'spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza',
+  'donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop',
+  'mouse','remote','keyboard','cell phone','microwave','oven','toaster','sink','refrigerator',
+  'book','clock','vase','scissors','teddy bear','hair drier','toothbrush'];
+
+// ── RESIZE ──
+function resize() {
+  overlay.width = window.innerWidth; overlay.height = window.innerHeight;
+  drawCanvas.width = window.innerWidth; drawCanvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize); resize();
+
+// ── CAMERA ──
+navigator.mediaDevices.getUserMedia({
+  video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+}).then(function(stream) {
+  video.srcObject = stream; video.play();
+}).catch(function() {
+  document.getElementById('loading').querySelector('p').textContent = 'CAMERA DENIED';
+  document.getElementById('loading').querySelector('small').textContent = 'Allow camera access and reload';
+});
+
+// ── LOAD COCO ──
+cocoSsd.load().then(function(m) {
+  cocoModel = m; activeModel = m; activeModelType = 'coco';
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('liveDot').classList.add('on');
+  document.getElementById('liveText').textContent = 'LIVE';
+  buildChips();
+  showHint('Auto mode — all objects outlined');
+  detect();
+}).catch(function(e) {
+  document.getElementById('loading').querySelector('p').textContent = 'MODEL FAILED';
+  document.getElementById('loading').querySelector('small').textContent = e.message;
+});
+
+// ── DETECT LOOP ──
+function detect() {
+  if (!activeModel || video.readyState < 2) { requestAnimationFrame(detect); return; }
+  var promise;
+  if (activeModelType === 'coco') {
+    promise = activeModel.detect(video);
+  } else if (activeModelType === 'roboflow') {
+    promise = rfDetect();
+  } else if (activeModelType === 'custom') {
+    promise = customDetect();
+  } else {
+    promise = Promise.resolve([]);
+  }
+  promise.then(function(preds) {
+    detections = preds || [];
+    drawFrame();
+    requestAnimationFrame(detect);
+  }).catch(function() { requestAnimationFrame(detect); });
+}
+
+// ── DRAW ──
+function drawFrame() {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  var vw = overlay.width, vh = overlay.height;
+  var vidW = video.videoWidth || 640, vidH = video.videoHeight || 480;
+  var scale = Math.max(vw / vidW, vh / vidH);
+  var offX = (vw - vidW * scale) / 2, offY = (vh - vidH * scale) / 2;
+
+  function toC(bx,by,bw,bh) {
+    return { x: offX+bx*scale, y: offY+by*scale, w: bw*scale, h: bh*scale };
   }
 
-  #overlay {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    pointer-events: none;
-  }
+  var filtered = detections.filter(function(d) {
+    return filterClasses.length === 0 || filterClasses.indexOf(d.class.toLowerCase()) >= 0;
+  });
 
-  #drawCanvas {
-    position: absolute; inset: 0;
-    width: 100%; height: 100%;
-    touch-action: none;
+  if (mode === 'auto') {
+    filtered.forEach(function(d) {
+      var c = toC(d.bbox[0],d.bbox[1],d.bbox[2],d.bbox[3]);
+      drawBox2(c.x,c.y,c.w,c.h, d.class, d.score, getColor(d.class));
+    });
+  } else if (mode === 'tap') {
+    detections.forEach(function(d) {
+      var c = toC(d.bbox[0],d.bbox[1],d.bbox[2],d.bbox[3]);
+      ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1;
+      ctx.strokeRect(c.x,c.y,c.w,c.h);
+    });
+    if (tappedBox) drawBox2(tappedBox.x,tappedBox.y,tappedBox.w,tappedBox.h, tappedBox.label, tappedBox.score, '#00ffcc');
+  } else if (mode === 'draw') {
+    if (drawBox) {
+      var best = getBestMatch(drawBox);
+      if (best) {
+        var c2 = toC(best.bbox[0],best.bbox[1],best.bbox[2],best.bbox[3]);
+        drawBox2(c2.x,c2.y,c2.w,c2.h, best.class, best.score, '#ff6b35');
+      }
+      ctx.strokeStyle='rgba(255,255,255,0.45)'; ctx.lineWidth=1.5;
+      ctx.setLineDash([5,5]); ctx.strokeRect(drawBox.x,drawBox.y,drawBox.w,drawBox.h); ctx.setLineDash([]);
+    }
   }
+}
 
-  /* Top HUD */
-  #hud {
-    position: absolute;
+function drawBox2(x,y,w,h,label,score,color) {
+  var t = Date.now()/1000;
+  var cs = Math.min(w,h)*0.22;
+  ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+  ctx.shadowColor = color; ctx.shadowBlur = 12;
+  ctx.beginPath();
+  ctx.moveTo(x,y+cs); ctx.lineTo(x,y); ctx.lineTo(x+cs,y);
+  ctx.moveTo(x+w-cs,y); ctx.lineTo(x+w,y); ctx.lineTo(x+w,y+cs);
+  ctx.moveTo(x,y+h-cs); ctx.lineTo(x,y+h); ctx.lineTo(x+cs,y+h);
+  ctx.moveTo(x+w-cs,y+h); ctx.lineTo(x+w,y+h); ctx.lineTo(x+w,y+h-cs);
+  ctx.stroke(); ctx.shadowBlur = 0;
+
+  var scanY = y + ((t*70) % h);
+  var g = ctx.createLinearGradient(x,scanY-10,x,scanY+10);
+  g.addColorStop(0,'transparent'); g.addColorStop(0.5,color+'44'); g.addColorStop(1,'transparent');
+  ctx.fillStyle = g; ctx.fillRect(x,scanY-10,w,20);
+
+  ctx.fillStyle = color; ctx.shadowColor = color; ctx.shadowBlur = 6;
+  [[x,y],[x+w,y],[x,y+h],[x+w,y+h]].forEach(function(p){
+    ctx.beginPath(); ctx.arc(p[0],p[1],3,0,Math.PI*2); ctx.fill();
+  }); ctx.shadowBlur = 0;
+
+  var pct = score ? Math.round(score*100)+'%' : '';
+  var tag = label.toUpperCase() + (pct ? '  '+pct : '');
+  ctx.font = 'bold 11px Courier New';
+  var tw = ctx.measureText(tag).width;
+  var tagY = y-24; if(tagY<0) tagY=y+4;
+  ctx.fillStyle = color; ctx.fillRect(x,tagY,tw+14,20);
+  ctx.fillStyle='#000'; ctx.fillText(tag,x+7,tagY+14);
+
+  ctx.fillStyle = color+'10'; ctx.fillRect(x,y,w,h);
+}
+
+// ── TOUCH / CLICK ──
+drawCanvas.addEventListener('click', function(e) {
+  if (mode !== 'tap') return;
+  var r = drawCanvas.getBoundingClientRect();
+  tappedBox = findBoxAt(e.clientX-r.left, e.clientY-r.top);
+});
+drawCanvas.addEventListener('touchend', function(e) {
+  if (mode !== 'tap') return;
+  e.preventDefault();
+  var r = drawCanvas.getBoundingClientRect(), t = e.changedTouches[0];
+  tappedBox = findBoxAt(t.clientX-r.left, t.clientY-r.top);
+}, {passive:false});
+
+drawCanvas.addEventListener('touchstart', function(e) {
+  if (mode !== 'draw') return; e.preventDefault();
+  var r = drawCanvas.getBoundingClientRect(), t = e.touches[0];
+  drawStart = {x:t.clientX-r.left, y:t.clientY-r.top}; isDrawing=true; drawBox=null;
+},{passive:false});
+drawCanvas.addEventListener('touchmove', function(e) {
+  if (!isDrawing || mode !== 'draw') return; e.preventDefault();
+  var r = drawCanvas.getBoundingClientRect(), t = e.touches[0];
+  var cx=t.clientX-r.left, cy=t.clientY-r.top;
+  drawBox={x:Math.min(drawStart.x,cx),y:Math.min(drawStart.y,cy),w:Math.abs(cx-drawStart.x),h:Math.abs(cy-drawStart.y)};
+  dctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+  dctx.strokeStyle='rgba(255,255,255,0.6)'; dctx.lineWidth=2; dctx.setLineDash([6,4]);
+  dctx.strokeRect(drawBox.x,drawBox.y,drawBox.w,drawBox.h); dctx.setLineDash([]);
+},{passive:false});
+drawCanvas.addEventListener('touchend', function(e) {
+  if (mode!=='draw') return; isDrawing=false;
+  dctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+},{passive:false});
+drawCanvas.addEventListener('mousedown',function(e){if(mode!=='draw')return;var r=drawCanvas.getBoundingClientRect();drawStart={x:e.clientX-r.left,y:e.clientY-r.top};isDrawing=true;drawBox=null;});
+drawCanvas.addEventListener('mousemove',function(e){if(!isDrawing||mode!=='draw')return;var r=drawCanvas.getBoundingClientRect();var cx=e.clientX-r.left,cy=e.clientY-r.top;drawBox={x:Math.min(drawStart.x,cx),y:Math.min(drawStart.y,cy),w:Math.abs(cx-drawStart.x),h:Math.abs(cy-drawStart.y)};dctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);dctx.strokeStyle='rgba(255,255,255,0.6)';dctx.lineWidth=2;dctx.setLineDash([6,4]);dctx.strokeRect(drawBox.x,drawBox.y,drawBox.w,drawBox.h);dctx.setLineDash([]);});
+drawCanvas.addEventListener('mouseup',function(){isDrawing=false;dctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);});
+
+function findBoxAt(cx,cy) {
+  var vw=overlay.width,vh=overlay.height,vidW=video.videoWidth||640,vidH=video.videoHeight||480;
+  var scale=Math.max(vw/vidW,vh/vidH),offX=(vw-vidW*scale)/2,offY=(vh-vidH*scale)/2;
+  var best=null,bestArea=Infinity;
+  detections.forEach(function(d){
+    var x=offX+d.bbox[0]*scale,y=offY+d.bbox[1]*scale,w=d.bbox[2]*scale,h=d.bbox[3]*scale;
+    if(cx>=x&&cx<=x+w&&cy>=y&&cy<=y+h){var a=w*h;if(a<bestArea){bestArea=a;best={x,y,w,h,label:d.class,score:d.score};}}
+  });
+  return best;
+}
+function getBestMatch(box) {
+  var vw=overlay.width,vh=overlay.height,vidW=video.videoWidth||640,vidH=video.videoHeight||480;
+  var scale=Math.max(vw/vidW,vh/vidH),offX=(vw-vidW*scale)/2,offY=(vh-vidH*scale)/2;
+  var best=null,bestOverlap=0;
+  detections.forEach(function(d){
+    var dx=offX+d.bbox[0]*scale,dy=offY+d.bbox[1]*scale,dw=d.bbox[2]*scale,dh=d.bbox[3]*scale;
+    var ox=Math.max(box.x,dx),oy=Math.max(box.y,dy),ox2=Math.min(box.x+box.w,dx+dw),oy2=Math.min(box.y+box.h,dy+dh);
+    if(ox2>ox&&oy2>oy){var ov=(ox2-ox)*(oy2-oy);if(ov>bestOverlap){bestOverlap=ov;best=d;}}
+  });
+  return best;
+}
+
+// ── MODE ──
+function setMode(m) {
+  mode=m; tappedBox=null; drawBox=null; isDrawing=false;
+  dctx.clearRect(0,0,drawCanvas.width,drawCanvas.height);
+  ['auto','tap','draw'].forEach(function(id){document.getElementById('btn-'+id).classList.toggle('active',id===m);});
+  drawCanvas.style.pointerEvents=(m==='draw'||m==='tap')?'auto':'none';
+  var hints={auto:'All detected objects outlined',tap:'Tap an object to highlight it',draw:'Draw a box around your object'};
+  showHint(hints[m]);
+}
+
+// ── TABS ──
+function switchTab(t) {
+  currentTab = t;
+  document.querySelectorAll('.tab').forEach(function(el){el.classList.remove('active');});
+  document.querySelectorAll('.panel').forEach(function(el){el.classList.remove('active');});
+  document.getElementById('tab-'+t).classList.add('active');
+  document.getElementById('panel'+t.charAt(0).toUpperCase()+t.slice(1)).classList.add('active');
+  // set draw canvas pointer events based on tab
+  if (t === 'live') drawCanvas.style.pointerEvents = (mode==='draw'||mode==='tap') ? 'auto' : 'none';
+  else drawCanvas.style.pointerEvents = 'none';
+}
+
+// ── FILTER ──
+function buildChips() {
+  var row = document.getElementById('chipsRow');
+  COCO_CLASSES.slice(0,20).forEach(function(c) {
+    var el = document.createElement('div');
+    el.className = 'chip'; el.textContent = c; el.dataset.cls = c;
+    el.onclick = function() { toggleChip(c, el); };
+    row.appendChild(el);
+  });
+}
+function toggleChip(cls, el) {
+  var idx = filterClasses.indexOf(cls);
+  if (idx >= 0) { filterClasses.splice(idx,1); el.classList.remove('active'); }
+  else { filterClasses.push(cls); el.classList.add('active'); }
+  document.getElementById('filterInput').value = filterClasses.join(', ');
+}
+function applyFilter() {
+  var val = document.getElementById('filterInput').value.trim();
+  filterClasses = val ? val.split(',').map(function(s){return s.trim().toLowerCase();}).filter(Boolean) : [];
+  document.querySelectorAll('.chip').forEach(function(el){
+    el.classList.toggle('active', filterClasses.indexOf(el.dataset.cls)>=0);
+  });
+  showHint(filterClasses.length ? 'Showing: '+filterClasses.join(', ') : 'Showing all classes');
+}
+function clearFilter() {
+  filterClasses=[];
+  document.getElementById('filterInput').value='';
+  document.querySelectorAll('.chip').forEach(function(el){el.classList.remove('active');});
+  showHint('Showing all classes');
+}
+
+// ── ROBOFLOW ──
+function fillRFPreset(modelPath) {
+  document.getElementById('rfUrl').value = 'https://detect.roboflow.com/' + modelPath;
+}
+function loadRoboflow() {
+  var url = document.getElementById('rfUrl').value.trim();
+  var key = document.getElementById('rfKey').value.trim();
+  if (!url) { setRFStatus('error','Enter a model URL first'); return; }
+  if (!key) { setRFStatus('error','Enter your Roboflow API key'); return; }
+  rfApiKey = key;
+  // Extract model/version from URL
+  var parts = url.replace('https://detect.roboflow.com/','').split('/');
+  var modelId = parts[0], version = parts[1]||'1';
+  setRFStatus('loading','Loading model...');
+  // Use Roboflow hosted inference API (no local model needed)
+  rfModelObj = { id: modelId, version: version };
+  activeModel = 'roboflow';
+  activeModelType = 'roboflow';
+  setRFStatus('ok','Model ready: '+modelId+'/'+version);
+  document.getElementById('liveDot').classList.add('on');
+  document.getElementById('liveText').textContent = 'RF LIVE';
+  showHint('Roboflow model active: '+modelId);
+}
+function rfDetect() {
+  if (!rfModelObj) return Promise.resolve([]);
+  // Capture frame to base64
+  var c = document.createElement('canvas');
+  c.width = video.videoWidth||640; c.height = video.videoHeight||480;
+  c.getContext('2d').drawImage(video,0,0);
+  var b64 = c.toDataURL('image/jpeg',0.7).split(',')[1];
+  return fetch('https://detect.roboflow.com/'+rfModelObj.id+'/'+rfModelObj.version+'?api_key='+rfApiKey, {
+    method: 'POST',
+    headers: {'Content-Type':'application/x-www-form-urlencoded'},
+    body: b64
+  }).then(function(r){return r.json();}).then(function(data){
+    if (!data.predictions) return [];
+    return data.predictions.map(function(p){
+      return { bbox:[p.x-p.width/2, p.y-p.height/2, p.width, p.height], class:p.class, score:p.confidence };
+    });
+  }).catch(function(){return [];});
+}
+function setRFStatus(type, msg) {
+  var el = document.getElementById('rfStatus');
+  el.className='rf-status '+type; el.textContent=msg;
+}
+
+// ── CUSTOM MODEL ──
+function fileLoaded(type, input) {
+  customFiles[type] = input.files;
+  var labels = {json:'labelJson',weights:'labelWeights',labels:'labelLabels'};
+  var names = Array.from(input.files).map(function(f){return f.name;}).join(', ');
+  var el = document.getElementById(labels[type]);
+  el.textContent = '✅ '+names; el.classList.add('loaded');
+}
+function loadCustomModel() {
+  if (!customFiles.json) { alert('Please select model.json'); return; }
+  var jsonFile = customFiles.json[0];
+  // Read labels
+  if (customFiles.labels) {
+    var lr = new FileReader();
+    lr.onload = function(e) {
+      var txt = e.target.result;
+      try { customLabels = JSON.parse(txt); }
+      catch(e2) { customLabels = txt.split('\n').map(function(s){return s.trim();}).filter(Boolean); }
+    };
+    lr.readAsText(customFiles.labels[0]);
+  }
+  // Build weight file URLs
+  var weightUrls = customFiles.weights ? Array.from(customFiles.weights).map(function(f){return URL.createObjectURL(f);}) : [];
+  var jsonUrl = URL.createObjectURL(jsonFile);
+  tf.loadGraphModel(jsonUrl).then(function(m) {
+    customModelObj = m;
+    activeModel = m; activeModelType = 'custom';
+    document.getElementById('liveDot').classList.add('on');
+    document.getElementById('liveText').textContent = 'CUSTOM';
+    showHint('Custom model loaded!');
+    alert('Custom model loaded! Switch to Live tab to see detections.');
+  }).catch(function(e) { alert('Failed to load model: '+e.message); });
+}
+function customDetect() {
+  if (!customModelObj) return Promise.resolve([]);
+  try {
+    var tensor = tf.browser.fromPixels(video)
+      .resizeBilinear([640,640])
+      .expandDims(0)
+      .div(255.0);
+    var result = customModelObj.predict(tensor);
+    tensor.dispose();
+    // Basic output parsing — assumes [batch, num_detections, 6] (x1,y1,x2,y2,score,class)
+    return result.array().then(function(arr) {
+      var preds = arr[0] || [];
+      return preds.filter(function(p){return p[4]>0.3;}).map(function(p){
+        var cls = customLabels[Math.round(p[5])] || 'object_'+Math.round(p[5]);
+        var vidW=video.videoWidth||640, vidH=video.videoHeight||480;
+        return { bbox:[p[0]*vidW, p[1]*vidH, (p[2]-p[0])*vidW, (p[3]-p[1])*vidH], class:cls, score:p[4] };
+      });
+    });
+  } catch(e) { return Promise.resolve([]); }
+}
+
+// ── HINT ──
+var hintTimer;
+function showHint(txt) {
+  var h=document.getElementById('hint');
+  h.textContent=txt; h.classList.remove('fade');
+  clearTimeout(hintTimer);
+  hintTimer=setTimeout(function(){h.classList.add('fade');},2800);
+}
+</script>
+</body>
+</html>
     top: 0; left: 0; right: 0;
     padding: 12px 14px 8px;
     background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
