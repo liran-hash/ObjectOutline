@@ -5,35 +5,261 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ObjectScan Live</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; }
 
-#videoWrap { position: fixed; inset: 0; z-index: 0; }
-#video { width: 100%; height: 100%; object-fit: cover; display: block; }
-#overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-#drawCanvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; pointer-events: none; }
+#video { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+#canvas { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 
-body::before {
-  content: '';
-  position: fixed; inset: 0;
-  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,255,180,0.015) 3px, rgba(0,255,180,0.015) 4px);
-  pointer-events: none; z-index: 999;
+/* START SCREEN */
+#startScreen {
+  position: fixed; inset: 0; z-index: 100;
+  background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 24px;
+}
+#startScreen h1 { font-size: 18px; color: #00ffcc; letter-spacing: 4px; }
+#startScreen p  { font-size: 12px; color: #555; text-align: center; max-width: 260px; line-height: 1.7; }
+#startBtn {
+  margin-top: 8px;
+  padding: 18px 48px;
+  font-size: 16px; font-family: 'Courier New', monospace;
+  background: #00ffcc; color: #000; font-weight: bold;
+  border: none; border-radius: 12px; cursor: pointer;
+  letter-spacing: 2px;
 }
 
-#hud {
-  position: fixed; top: 0; left: 0; right: 0; z-index: 10;
-  padding: 10px 14px 8px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
-  display: flex; align-items: center; justify-content: space-between;
-  pointer-events: none;
+/* STATUS */
+#status {
+  position: fixed; bottom: 100px; left: 0; right: 0;
+  text-align: center; font-size: 12px; color: #00ffcc;
+  letter-spacing: 2px; z-index: 50; pointer-events: none;
 }
-#title { font-size: 12px; color: #00ffcc; letter-spacing: 3px; }
-#livePill {
-  display: flex; align-items: center; gap: 5px;
-  background: rgba(0,0,0,0.5); border: 1px solid rgba(0,255,204,0.3);
-  border-radius: 20px; padding: 3px 10px; font-size: 10px; color: #00ffcc; letter-spacing: 1px;
+
+/* MODE BAR */
+#modeBar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+  display: none;
+  background: rgba(0,0,0,0.8);
+  padding: 10px 12px 24px;
+  gap: 8px;
 }
-#liveDot { width: 6px; height: 6px; border-radius: 50%; background: #ff4444; animation: blink 1s infinite; }
+#modeBar.show { display: flex; }
+.mbtn {
+  flex: 1; padding: 10px 4px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(0,0,0,0.6); color: #555;
+  font-family: 'Courier New', monospace; font-size: 11px;
+  text-align: center; cursor: pointer;
+}
+.mbtn.on { border-color: #00ffcc; background: rgba(0,255,204,0.12); color: #00ffcc; }
+.mbtn span { font-size: 18px; display: block; margin-bottom: 3px; }
+
+#drawLayer {
+  position: fixed; inset: 0; z-index: 10;
+  touch-action: none; pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+<div id="drawLayer"></div>
+
+<div id="startScreen">
+  <h1>OBJECTSCAN</h1>
+  <p>Real-time object detection.<br>Tap START to open your camera.</p>
+  <button id="startBtn" onclick="startApp()">▶ START</button>
+  <p id="errMsg" style="color:#ff4444;display:none"></p>
+</div>
+
+<div id="status"></div>
+
+<div id="modeBar">
+  <div class="mbtn on"  id="btn-auto" onclick="setMode('auto')"><span>🔍</span>Auto</div>
+  <div class="mbtn"     id="btn-tap"  onclick="setMode('tap')"> <span>👆</span>Tap</div>
+  <div class="mbtn"     id="btn-draw" onclick="setMode('draw')"><span>✏️</span>Draw</div>
+</div>
+
+<script>
+var video     = document.getElementById('video');
+var canvas    = document.getElementById('canvas');
+var drawLayer = document.getElementById('drawLayer');
+var ctx       = canvas.getContext('2d');
+
+var mode       = 'auto';
+var detections = [];
+var tappedBox  = null;
+var isDrawing  = false;
+var drawStart  = {};
+var userBox    = null;
+
+var COLORS = ['#00ffcc','#ff6b35','#ffdd00','#ff4dff','#88ff00','#ff4d4d','#4dffff'];
+var colorMap = {};
+function color(l) { if (!colorMap[l]) colorMap[l] = COLORS[Object.keys(colorMap).length % COLORS.length]; return colorMap[l]; }
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+function showErr(msg)   { var e=document.getElementById('errMsg'); e.style.display='block'; e.textContent=msg; }
+
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+function startApp() {
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('startBtn').textContent = 'OPENING...';
+  setStatus('');
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' } }
+  }).then(function(stream) {
+    video.srcObject = stream;
+    video.play();
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('modeBar').classList.add('show');
+    setStatus('LOADING AI — please wait...');
+    loadTF();
+  }).catch(function(e) {
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('startBtn').textContent = '▶ START';
+    showErr(e.name + ': ' + e.message);
+  });
+}
+
+function loadTF() {
+  var s1 = document.createElement('script');
+  s1.src = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js';
+  s1.onload = function() {
+    setStatus('LOADING DETECTOR...');
+    var s2 = document.createElement('script');
+    s2.src = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js';
+    s2.onload = function() {
+      setStatus('BUILDING MODEL...');
+      cocoSsd.load({ base: 'lite_mobilenet_v2' }).then(function(model) {
+        window._model = model;
+        setStatus('');
+        requestAnimationFrame(loop);
+      }).catch(function(e) { setStatus('MODEL ERROR: ' + e.message); });
+    };
+    s2.onerror = function() { setStatus('FAILED: could not load detector'); };
+    document.head.appendChild(s2);
+  };
+  s1.onerror = function() { setStatus('FAILED: could not load TF.js'); };
+  document.head.appendChild(s1);
+}
+
+function loop() {
+  if (!window._model || video.readyState < 2) { requestAnimationFrame(loop); return; }
+  window._model.detect(video).then(function(preds) {
+    detections = preds;
+    draw();
+    requestAnimationFrame(loop);
+  }).catch(function() { requestAnimationFrame(loop); });
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  var vw = canvas.width, vh = canvas.height;
+  var vW = video.videoWidth || 640, vH = video.videoHeight || 480;
+  var sc = Math.max(vw/vW, vh/vH);
+  var ox = (vw - vW*sc)/2, oy = (vh - vH*sc)/2;
+
+  function toC(b) { return { x:ox+b[0]*sc, y:oy+b[1]*sc, w:b[2]*sc, h:b[3]*sc }; }
+
+  if (mode === 'auto') {
+    detections.forEach(function(d) { var c=toC(d.bbox); box(c.x,c.y,c.w,c.h,d.class,d.score,color(d.class)); });
+  } else if (mode === 'tap') {
+    detections.forEach(function(d) { var c=toC(d.bbox); ctx.strokeStyle='rgba(255,255,255,0.1)'; ctx.lineWidth=1; ctx.strokeRect(c.x,c.y,c.w,c.h); });
+    if (tappedBox) box(tappedBox.x,tappedBox.y,tappedBox.w,tappedBox.h,tappedBox.label,tappedBox.score,'#00ffcc');
+  } else if (mode === 'draw') {
+    if (userBox) {
+      var best = bestMatch(userBox);
+      if (best) { var c2=toC(best.bbox); box(c2.x,c2.y,c2.w,c2.h,best.class,best.score,'#ff6b35'); }
+      ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+      ctx.strokeRect(userBox.x,userBox.y,userBox.w,userBox.h); ctx.setLineDash([]);
+    }
+  }
+}
+
+function box(x,y,w,h,label,score,col) {
+  var t=Date.now()/1000, cs=Math.min(w,h)*0.2;
+  ctx.strokeStyle=col; ctx.lineWidth=2.5; ctx.shadowColor=col; ctx.shadowBlur=8;
+  ctx.beginPath();
+  ctx.moveTo(x,y+cs);ctx.lineTo(x,y);ctx.lineTo(x+cs,y);
+  ctx.moveTo(x+w-cs,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+cs);
+  ctx.moveTo(x,y+h-cs);ctx.lineTo(x,y+h);ctx.lineTo(x+cs,y+h);
+  ctx.moveTo(x+w-cs,y+h);ctx.lineTo(x+w,y+h);ctx.lineTo(x+w,y+h-cs);
+  ctx.stroke(); ctx.shadowBlur=0;
+  var sy=y+((t*60)%h);
+  var g=ctx.createLinearGradient(x,sy-8,x,sy+8);
+  g.addColorStop(0,'transparent');g.addColorStop(.5,col+'44');g.addColorStop(1,'transparent');
+  ctx.fillStyle=g; ctx.fillRect(x,sy-8,w,16);
+  var tag=label.toUpperCase()+(score?' '+Math.round(score*100)+'%':'');
+  ctx.font='bold 11px Courier New';
+  var tw=ctx.measureText(tag).width, ty=y-20; if(ty<0)ty=y+3;
+  ctx.fillStyle=col; ctx.fillRect(x,ty,tw+12,18); ctx.fillStyle='#000'; ctx.fillText(tag,x+6,ty+13);
+  ctx.fillStyle=col+'0d'; ctx.fillRect(x,y,w,h);
+}
+
+function hitInfo() {
+  var vW=video.videoWidth||640,vH=video.videoHeight||480;
+  var sc=Math.max(canvas.width/vW,canvas.height/vH);
+  return {sc:sc,ox:(canvas.width-vW*sc)/2,oy:(canvas.height-vH*sc)/2};
+}
+function findAt(cx,cy) {
+  var i=hitInfo(),best=null,ba=Infinity;
+  detections.forEach(function(d){
+    var x=i.ox+d.bbox[0]*i.sc,y=i.oy+d.bbox[1]*i.sc,w=d.bbox[2]*i.sc,h=d.bbox[3]*i.sc;
+    if(cx>=x&&cx<=x+w&&cy>=y&&cy<=y+h){var a=w*h;if(a<ba){ba=a;best={x,y,w,h,label:d.class,score:d.score};}}
+  });
+  return best;
+}
+function bestMatch(box) {
+  var i=hitInfo(),best=null,bo=0;
+  detections.forEach(function(d){
+    var dx=i.ox+d.bbox[0]*i.sc,dy=i.oy+d.bbox[1]*i.sc,dw=d.bbox[2]*i.sc,dh=d.bbox[3]*i.sc;
+    var ox=Math.max(box.x,dx),oy=Math.max(box.y,dy),ox2=Math.min(box.x+box.w,dx+dw),oy2=Math.min(box.y+box.h,dy+dh);
+    if(ox2>ox&&oy2>oy){var o=(ox2-ox)*(oy2-oy);if(o>bo){bo=o;best=d;}}
+  });
+  return best;
+}
+
+// Touch events on draw layer
+drawLayer.addEventListener('touchend',function(e){
+  if(mode!=='tap')return; e.preventDefault();
+  var r=drawLayer.getBoundingClientRect(),t=e.changedTouches[0];
+  tappedBox=findAt(t.clientX-r.left,t.clientY-r.top);
+},{passive:false});
+
+drawLayer.addEventListener('touchstart',function(e){
+  if(mode!=='draw')return; e.preventDefault();
+  var r=drawLayer.getBoundingClientRect(),t=e.touches[0];
+  drawStart={x:t.clientX-r.left,y:t.clientY-r.top}; isDrawing=true; userBox=null;
+},{passive:false});
+drawLayer.addEventListener('touchmove',function(e){
+  if(!isDrawing||mode!=='draw')return; e.preventDefault();
+  var r=drawLayer.getBoundingClientRect(),t=e.touches[0];
+  var cx=t.clientX-r.left,cy=t.clientY-r.top;
+  userBox={x:Math.min(drawStart.x,cx),y:Math.min(drawStart.y,cy),w:Math.abs(cx-drawStart.x),h:Math.abs(cy-drawStart.y)};
+},{passive:false});
+drawLayer.addEventListener('touchend',function(e){
+  if(mode==='draw') isDrawing=false;
+},{passive:false});
+
+drawLayer.addEventListener('click',function(e){
+  if(mode!=='tap')return;
+  var r=drawLayer.getBoundingClientRect();
+  tappedBox=findAt(e.clientX-r.left,e.clientY-r.top);
+});
+
+function setMode(m) {
+  mode=m; tappedBox=null; userBox=null; isDrawing=false;
+  ['auto','tap','draw'].forEach(function(id){document.getElementById('btn-'+id).classList.toggle('on',id===m);});
+  drawLayer.style.pointerEvents=(m==='tap'||m==='draw')?'auto':'none';
+}
+</script>
+</body>
+</html>
 #liveDot.on { background: #00ffcc; }
 @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }
 
