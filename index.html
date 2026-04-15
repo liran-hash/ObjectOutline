@@ -1,49 +1,36 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>ObjectScan Live</title>
-<style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #000; color: #fff; font-family: 'Courier New', monospace; overflow: hidden; height: 100vh; width: 100vw; }
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera Test</title>
+</head>
+<body style="background:#000;color:#fff;font-family:monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:20px;margin:0;">
 
-/* VIDEO */
-#video  { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
-#canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+<div id="msg" style="font-size:14px;color:#0f0;">Tap the button</div>
 
-/* TOUCH LAYER - only active in tap/draw mode */
-#touchLayer { position: fixed; inset: 0; z-index: 3; display: none; touch-action: none; }
+<button id="btn" style="padding:30px 60px;font-size:20px;background:#0f0;color:#000;border:none;border-radius:10px;">START</button>
 
-/* START SCREEN */
-#startScreen {
-  position: fixed; inset: 0; z-index: 100;
-  background: #000;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 20px;
-  text-align: center; padding: 30px;
-}
-#startScreen h1 { font-size: 22px; color: #00ffcc; letter-spacing: 4px; }
-#startScreen p  { font-size: 12px; color: #555; line-height: 1.8; }
-#startBtn {
-  padding: 20px 60px; font-size: 18px;
-  font-family: 'Courier New', monospace; font-weight: bold;
-  background: #00ffcc; color: #000; border: none;
-  border-radius: 14px; cursor: pointer; letter-spacing: 2px;
-  -webkit-tap-highlight-color: rgba(0,0,0,0);
-}
-#errMsg { font-size: 11px; color: #ff4444; min-height: 16px; }
+<video id="v" autoplay playsinline muted style="width:100%;max-width:400px;display:none;"></video>
 
-/* STATUS TEXT */
-#status {
-  position: fixed; top: 50%; left: 0; right: 0;
-  transform: translateY(-50%);
-  text-align: center; font-size: 12px; color: #00ffcc;
-  letter-spacing: 2px; z-index: 20; pointer-events: none;
-  display: none;
-}
-
-/* TOP TABS */
+<script>
+document.getElementById('btn').addEventListener('click', function() {
+  document.getElementById('msg').textContent = 'clicked...';
+  navigator.mediaDevices.getUserMedia({ video: true })
+  .then(function(stream) {
+    document.getElementById('msg').textContent = 'camera ok!';
+    var v = document.getElementById('v');
+    v.srcObject = stream;
+    v.style.display = 'block';
+    v.play();
+  })
+  .catch(function(e) {
+    document.getElementById('msg').textContent = 'ERROR: ' + e.name + ' - ' + e.message;
+  });
+});
+</script>
+</body>
+</html>
 #tabs {
   position: fixed; top: 0; left: 0; right: 0; z-index: 20;
   display: none; /* shown after camera starts */
