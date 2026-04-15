@@ -59,6 +59,414 @@ body { background: #000; color: #fff; font-family: 'Courier New', monospace; ove
   position: fixed; inset: 0; z-index: 10;
   touch-action: none; pointer-events: none;
 }
+
+#tabBar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  display: none; background: rgba(0,0,0,0.85);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+#tabBar.show { display: flex; }
+.tab {
+  flex: 1; padding: 10px 4px; text-align: center;
+  font-size: 10px; color: #555; cursor: pointer;
+  letter-spacing: 1px; border-bottom: 2px solid transparent;
+}
+.tab span { font-size: 16px; display: block; margin-bottom: 2px; }
+.tab.active { color: #00ffcc; border-bottom-color: #00ffcc; }
+
+.panel { position: fixed; bottom: 0; left: 0; right: 0; z-index: 50; display: none; }
+.panel.active { display: block; }
+
+#modeBar { display: flex; gap: 8px; padding: 10px 12px 24px; background: rgba(0,0,0,0.85); }
+.mbtn {
+  flex: 1; padding: 10px 4px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.5);
+  color: #555; font-family: 'Courier New', monospace; font-size: 10px; text-align: center; cursor: pointer;
+}
+.mbtn span { font-size: 18px; display: block; margin-bottom: 3px; }
+.mbtn.on { border-color: #00ffcc; background: rgba(0,255,204,0.12); color: #00ffcc; }
+
+#panelFilter, #panelRoboflow, #panelCustom {
+  background: rgba(0,0,0,0.92); border-top: 1px solid rgba(255,255,255,0.1);
+  padding: 14px; max-height: 50vh; overflow-y: auto;
+}
+.panel-title { font-size: 10px; color: #00ffcc; letter-spacing: 2px; margin-bottom: 10px; }
+.filter-row { display: flex; gap: 8px; margin-bottom: 10px; }
+#filterInput {
+  flex: 1; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px; padding: 9px 12px; color: #fff;
+  font-family: 'Courier New', monospace; font-size: 12px; outline: none;
+}
+#filterInput::placeholder { color: #333; }
+.sbtn {
+  padding: 9px 12px; border-radius: 8px;
+  background: rgba(0,255,204,0.1); border: 1px solid rgba(0,255,204,0.3);
+  color: #00ffcc; font-family: 'Courier New', monospace; font-size: 11px; cursor: pointer;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 80px; overflow-y: auto; }
+.chip {
+  padding: 4px 10px; border-radius: 20px;
+  border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.05);
+  font-size: 10px; color: #777; cursor: pointer;
+}
+.chip.on { border-color: #00ffcc; background: rgba(0,255,204,0.12); color: #00ffcc; }
+.rf-desc { font-size: 11px; color: #555; line-height: 1.6; margin-bottom: 10px; }
+.rf-input {
+  width: 100%; background: rgba(255,255,255,0.07); border: 1px solid rgba(255,107,53,0.25);
+  border-radius: 8px; padding: 9px 12px; color: #fff;
+  font-family: 'Courier New', monospace; font-size: 12px; outline: none; margin-bottom: 7px;
+}
+.rf-input::placeholder { color: #333; }
+.obtn { width:100%; padding:11px; border-radius:8px; background:rgba(255,107,53,0.15); border:1px solid rgba(255,107,53,0.4); color:#ff6b35; font-family:'Courier New',monospace; font-size:12px; cursor:pointer; margin-bottom:10px; }
+.gbtn { width:100%; padding:11px; border-radius:8px; background:rgba(136,255,0,0.12); border:1px solid rgba(136,255,0,0.35); color:#88ff00; font-family:'Courier New',monospace; font-size:12px; cursor:pointer; margin-bottom:10px; }
+.rf-preset { padding:9px 10px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); background:rgba(255,255,255,0.03); margin-bottom:6px; cursor:pointer; font-size:12px; color:#ccc; }
+.rf-preset:active { background:rgba(255,107,53,0.1); }
+.status-msg { font-size:11px; padding:8px; border-radius:6px; margin-top:8px; text-align:center; display:none; }
+.status-msg.ok { display:block; color:#00ffcc; background:rgba(0,255,204,0.08); border:1px solid rgba(0,255,204,0.2); }
+.status-msg.error { display:block; color:#ff4444; background:rgba(255,68,68,0.08); border:1px solid rgba(255,68,68,0.2); }
+.file-label { display:block; padding:10px 12px; border-radius:8px; border:1px dashed rgba(136,255,0,0.25); background:rgba(136,255,0,0.04); font-size:11px; color:#555; cursor:pointer; text-align:center; margin-bottom:7px; }
+.file-label.loaded { border-color:rgba(136,255,0,0.5); color:#88ff00; }
+input[type=file] { display:none; }
+.steps { font-size:10px; color:#444; line-height:1.9; border:1px solid rgba(255,255,255,0.05); border-radius:8px; padding:10px; }
+</style>
+</head>
+<body>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+<div id="drawLayer"></div>
+
+<div id="startScreen">
+  <h1>OBJECTSCAN</h1>
+  <p>Real-time object detection.<br>Tap START to open your camera.</p>
+  <button id="startBtn" onclick="startApp()">▶ START</button>
+  <p id="errMsg" style="color:#ff4444;display:none"></p>
+</div>
+
+<div id="status"></div>
+
+<!-- TAB BAR -->
+<div id="tabBar">
+  <div class="tab active" id="tab-live"      onclick="switchTab('live')">      <span>📡</span>Live</div>
+  <div class="tab"        id="tab-filter"    onclick="switchTab('filter')">    <span>🔎</span>Filter</div>
+  <div class="tab"        id="tab-roboflow"  onclick="switchTab('roboflow')">  <span>🌐</span>Roboflow</div>
+  <div class="tab"        id="tab-custom"    onclick="switchTab('custom')">    <span>🧬</span>Custom</div>
+</div>
+
+<!-- PANELS -->
+<div class="panel active" id="panelLive">
+  <div id="modeBar">
+    <div class="mbtn on"  id="btn-auto" onclick="setMode('auto')"><span>🔍</span>Auto</div>
+    <div class="mbtn"     id="btn-tap"  onclick="setMode('tap')"> <span>👆</span>Tap</div>
+    <div class="mbtn"     id="btn-draw" onclick="setMode('draw')"><span>✏️</span>Draw</div>
+  </div>
+</div>
+
+<div class="panel" id="panelFilter">
+  <div class="panel-title">FILTER BY CLASS</div>
+  <div class="filter-row">
+    <input id="filterInput" type="text" placeholder="e.g. bottle, person, plant..." autocomplete="off">
+    <div class="sbtn" onclick="applyFilter()">SET</div>
+    <div class="sbtn" onclick="clearFilter()">ALL</div>
+  </div>
+  <div class="chips" id="chipsRow"></div>
+</div>
+
+<div class="panel" id="panelRoboflow">
+  <div class="panel-title" style="color:#ff6b35">ROBOFLOW MODEL</div>
+  <div class="rf-desc">Get a free model at <a href="https://universe.roboflow.com" target="_blank" style="color:#ff6b35">universe.roboflow.com</a> → export as Hosted API → paste below.</div>
+  <input class="rf-input" id="rfUrl" placeholder="https://detect.roboflow.com/model/1">
+  <input class="rf-input" id="rfKey" placeholder="Roboflow API key">
+  <button class="obtn" onclick="loadRoboflow()">ACTIVATE</button>
+  <div class="rf-preset" onclick="fillRF('fruit-detection-sweet/1')">🍎 Fruit Detection</div>
+  <div class="rf-preset" onclick="fillRF('tomato-disease-nxd1h/1')">🍅 Tomato Disease</div>
+  <div class="rf-preset" onclick="fillRF('pepper-disease/1')">🫑 Pepper Disease</div>
+  <div class="rf-preset" onclick="fillRF('plant-disease-detection-using-image-processing/1')">🌿 Plant Disease</div>
+  <div id="rfStatus" class="status-msg"></div>
+</div>
+
+<div class="panel" id="panelCustom">
+  <div class="panel-title" style="color:#88ff00">CUSTOM MODEL</div>
+  <label class="file-label" id="lJson"    for="fJson">📄 model.json</label>
+  <input type="file" id="fJson"    accept=".json"     onchange="fileLoaded('json',this)">
+  <label class="file-label" id="lWeights" for="fWeights">📦 weights.bin</label>
+  <input type="file" id="fWeights" accept=".bin" multiple onchange="fileLoaded('weights',this)">
+  <label class="file-label" id="lLabels"  for="fLabels">🏷 labels.txt</label>
+  <input type="file" id="fLabels"  accept=".txt,.json" onchange="fileLoaded('labels',this)">
+  <button class="gbtn" onclick="loadCustomModel()">LOAD MODEL</button>
+  <div class="steps">1. Label photos at roboflow.com<br>2. Train → Export TensorFlow.js<br>3. Load files above</div>
+</div>
+
+<script>
+var video     = document.getElementById('video');
+var canvas    = document.getElementById('canvas');
+var drawLayer = document.getElementById('drawLayer');
+var ctx       = canvas.getContext('2d');
+
+var mode       = 'auto';
+var detections = [];
+var tappedBox  = null;
+var isDrawing  = false;
+var drawStart  = {};
+var userBox    = null;
+
+var COLORS = ['#00ffcc','#ff6b35','#ffdd00','#ff4dff','#88ff00','#ff4d4d','#4dffff'];
+var colorMap = {};
+function color(l) { if (!colorMap[l]) colorMap[l] = COLORS[Object.keys(colorMap).length % COLORS.length]; return colorMap[l]; }
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+function showErr(msg)   { var e=document.getElementById('errMsg'); e.style.display='block'; e.textContent=msg; }
+
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+function startApp() {
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('startBtn').textContent = 'OPENING...';
+  document.getElementById('status').style.display = 'block';
+  setStatus('requesting camera...');
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' } }
+  }).then(function(stream) {
+    setStatus('camera ok — loading...');
+    video.srcObject = stream;
+    video.play().catch(function(){});
+    setStatus('video starting...');
+    var ss = document.getElementById('startScreen');
+    ss.style.display = 'none';
+    ss.style.visibility = 'hidden';
+    ss.style.zIndex = '-1';
+    document.getElementById('modeBar').classList.add('show');
+    document.getElementById('tabBar').classList.add('show');
+    setStatus('LOADING AI — please wait...');
+    loadTF();
+  }).catch(function(e) {
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('startBtn').textContent = '▶ START';
+    showErr(e.name + ': ' + e.message);
+    setStatus('');
+  });
+}
+
+function loadTF() {
+  var s1 = document.createElement('script');
+  s1.src = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js';
+  s1.onload = function() {
+    setStatus('LOADING DETECTOR...');
+    var s2 = document.createElement('script');
+    s2.src = 'https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js';
+    s2.onload = function() {
+      setStatus('BUILDING MODEL...');
+      cocoSsd.load({ base: 'lite_mobilenet_v2' }).then(function(model) {
+        window._model = model;
+        activeModelType = 'coco';
+        setStatus('');
+        buildChips();
+        requestAnimationFrame(loop);
+      }).catch(function(e) { setStatus('MODEL ERROR: ' + e.message); });
+    };
+    s2.onerror = function() { setStatus('FAILED: could not load detector'); };
+    document.head.appendChild(s2);
+  };
+  s1.onerror = function() { setStatus('FAILED: could not load TF.js'); };
+  document.head.appendChild(s1);
+}
+
+function loop() {
+  if (video.readyState < 2) { requestAnimationFrame(loop); return; }
+  var p;
+  if      (activeModelType==='coco'      && window._model) p = window._model.detect(video);
+  else if (activeModelType==='roboflow')                   p = rfDetect();
+  else if (activeModelType==='custom'    && customModelObj) p = customDetect();
+  else { requestAnimationFrame(loop); return; }
+  p.then(function(preds) {
+    detections = preds || [];
+    draw();
+    requestAnimationFrame(loop);
+  }).catch(function() { requestAnimationFrame(loop); });
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  var vw = canvas.width, vh = canvas.height;
+  var vW = video.videoWidth || 640, vH = video.videoHeight || 480;
+  var sc = Math.max(vw/vW, vh/vH);
+  var ox = (vw - vW*sc)/2, oy = (vh - vH*sc)/2;
+
+  function toC(b) { return { x:ox+b[0]*sc, y:oy+b[1]*sc, w:b[2]*sc, h:b[3]*sc }; }
+
+  var show = filterClasses.length===0 ? detections : detections.filter(function(d){
+    return filterClasses.indexOf(d.class.toLowerCase())>=0;
+  });
+
+  if (mode === 'auto') {
+    show.forEach(function(d) { var c=toC(d.bbox); box(c.x,c.y,c.w,c.h,d.class,d.score,color(d.class)); });
+  } else if (mode === 'tap') {
+    detections.forEach(function(d) { var c=toC(d.bbox); ctx.strokeStyle='rgba(255,255,255,0.1)'; ctx.lineWidth=1; ctx.strokeRect(c.x,c.y,c.w,c.h); });
+    if (tappedBox) box(tappedBox.x,tappedBox.y,tappedBox.w,tappedBox.h,tappedBox.label,tappedBox.score,'#00ffcc');
+  } else if (mode === 'draw') {
+    if (userBox) {
+      var best = bestMatch(userBox);
+      if (best) { var c2=toC(best.bbox); box(c2.x,c2.y,c2.w,c2.h,best.class,best.score,'#ff6b35'); }
+      ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+      ctx.strokeRect(userBox.x,userBox.y,userBox.w,userBox.h); ctx.setLineDash([]);
+    }
+  }
+}
+
+function box(x,y,w,h,label,score,col) {
+  var t=Date.now()/1000, cs=Math.min(w,h)*0.2;
+  ctx.strokeStyle=col; ctx.lineWidth=2.5; ctx.shadowColor=col; ctx.shadowBlur=8;
+  ctx.beginPath();
+  ctx.moveTo(x,y+cs);ctx.lineTo(x,y);ctx.lineTo(x+cs,y);
+  ctx.moveTo(x+w-cs,y);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+cs);
+  ctx.moveTo(x,y+h-cs);ctx.lineTo(x,y+h);ctx.lineTo(x+cs,y+h);
+  ctx.moveTo(x+w-cs,y+h);ctx.lineTo(x+w,y+h);ctx.lineTo(x+w,y+h-cs);
+  ctx.stroke(); ctx.shadowBlur=0;
+  var sy=y+((t*60)%h);
+  var g=ctx.createLinearGradient(x,sy-8,x,sy+8);
+  g.addColorStop(0,'transparent');g.addColorStop(.5,col+'44');g.addColorStop(1,'transparent');
+  ctx.fillStyle=g; ctx.fillRect(x,sy-8,w,16);
+  var tag=label.toUpperCase()+(score?' '+Math.round(score*100)+'%':'');
+  ctx.font='bold 11px Courier New';
+  var tw=ctx.measureText(tag).width, ty=y-20; if(ty<0)ty=y+3;
+  ctx.fillStyle=col; ctx.fillRect(x,ty,tw+12,18); ctx.fillStyle='#000'; ctx.fillText(tag,x+6,ty+13);
+  ctx.fillStyle=col+'0d'; ctx.fillRect(x,y,w,h);
+}
+
+function hitInfo() {
+  var vW=video.videoWidth||640,vH=video.videoHeight||480;
+  var sc=Math.max(canvas.width/vW,canvas.height/vH);
+  return {sc:sc,ox:(canvas.width-vW*sc)/2,oy:(canvas.height-vH*sc)/2};
+}
+function findAt(cx,cy) {
+  var i=hitInfo(),best=null,ba=Infinity;
+  detections.forEach(function(d){
+    var x=i.ox+d.bbox[0]*i.sc,y=i.oy+d.bbox[1]*i.sc,w=d.bbox[2]*i.sc,h=d.bbox[3]*i.sc;
+    if(cx>=x&&cx<=x+w&&cy>=y&&cy<=y+h){var a=w*h;if(a<ba){ba=a;best={x,y,w,h,label:d.class,score:d.score};}}
+  });
+  return best;
+}
+function bestMatch(box) {
+  var i=hitInfo(),best=null,bo=0;
+  detections.forEach(function(d){
+    var dx=i.ox+d.bbox[0]*i.sc,dy=i.oy+d.bbox[1]*i.sc,dw=d.bbox[2]*i.sc,dh=d.bbox[3]*i.sc;
+    var ox=Math.max(box.x,dx),oy=Math.max(box.y,dy),ox2=Math.min(box.x+box.w,dx+dw),oy2=Math.min(box.y+box.h,dy+dh);
+    if(ox2>ox&&oy2>oy){var o=(ox2-ox)*(oy2-oy);if(o>bo){bo=o;best=d;}}
+  });
+  return best;
+}
+
+// Touch events on draw layer
+drawLayer.addEventListener('touchend',function(e){
+  if(mode!=='tap')return; e.preventDefault();
+  var r=drawLayer.getBoundingClientRect(),t=e.changedTouches[0];
+  tappedBox=findAt(t.clientX-r.left,t.clientY-r.top);
+},{passive:false});
+
+drawLayer.addEventListener('touchstart',function(e){
+  if(mode!=='draw')return; e.preventDefault();
+  var r=drawLayer.getBoundingClientRect(),t=e.touches[0];
+  drawStart={x:t.clientX-r.left,y:t.clientY-r.top}; isDrawing=true; userBox=null;
+},{passive:false});
+drawLayer.addEventListener('touchmove',function(e){
+  if(!isDrawing||mode!=='draw')return; e.preventDefault();
+  var r=drawLayer.getBoundingClientRect(),t=e.touches[0];
+  var cx=t.clientX-r.left,cy=t.clientY-r.top;
+  userBox={x:Math.min(drawStart.x,cx),y:Math.min(drawStart.y,cy),w:Math.abs(cx-drawStart.x),h:Math.abs(cy-drawStart.y)};
+},{passive:false});
+drawLayer.addEventListener('touchend',function(e){
+  if(mode==='draw') isDrawing=false;
+},{passive:false});
+
+drawLayer.addEventListener('click',function(e){
+  if(mode!=='tap')return;
+  var r=drawLayer.getBoundingClientRect();
+  tappedBox=findAt(e.clientX-r.left,e.clientY-r.top);
+});
+
+function setMode(m) {
+  mode=m; tappedBox=null; userBox=null; isDrawing=false;
+  ['auto','tap','draw'].forEach(function(id){document.getElementById('btn-'+id).classList.toggle('on',id===m);});
+  drawLayer.style.pointerEvents=(m==='tap'||m==='draw')?'auto':'none';
+}
+
+var COCO=['person','bicycle','car','motorcycle','bus','truck','boat','bird','cat','dog','horse','sheep','cow','elephant','bear','zebra','giraffe','backpack','umbrella','handbag','suitcase','bottle','wine glass','cup','fork','knife','spoon','bowl','banana','apple','sandwich','orange','broccoli','carrot','hot dog','pizza','donut','cake','chair','couch','potted plant','bed','dining table','toilet','tv','laptop','mouse','remote','keyboard','cell phone','microwave','oven','sink','refrigerator','book','clock','vase','scissors','toothbrush'];
+var filterClasses=[];
+
+function buildChips(){
+  var row=document.getElementById('chipsRow');
+  COCO.forEach(function(c){var el=document.createElement('div');el.className='chip';el.textContent=c;el.dataset.c=c;el.onclick=function(){toggleChip(c,el);};row.appendChild(el);});
+}
+function toggleChip(c,el){var i=filterClasses.indexOf(c);if(i>=0){filterClasses.splice(i,1);el.classList.remove('on');}else{filterClasses.push(c);el.classList.add('on');}document.getElementById('filterInput').value=filterClasses.join(', ');}
+function applyFilter(){var v=document.getElementById('filterInput').value.trim();filterClasses=v?v.split(',').map(function(s){return s.trim().toLowerCase();}).filter(Boolean):[];document.querySelectorAll('.chip').forEach(function(el){el.classList.toggle('on',filterClasses.indexOf(el.dataset.c)>=0);});}
+function clearFilter(){filterClasses=[];document.getElementById('filterInput').value='';document.querySelectorAll('.chip').forEach(function(el){el.classList.remove('on');});}
+
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(function(el){el.classList.remove('active');});
+  document.querySelectorAll('.panel').forEach(function(el){el.classList.remove('active');});
+  document.getElementById('tab-'+t).classList.add('active');
+  document.getElementById('panel'+t.charAt(0).toUpperCase()+t.slice(1)).classList.add('active');
+  drawLayer.style.pointerEvents=(t==='live'&&(mode==='tap'||mode==='draw'))?'auto':'none';
+}
+
+// Roboflow
+var rfInfo=null, rfKey='', activeModelType='coco';
+function fillRF(p){document.getElementById('rfUrl').value='https://detect.roboflow.com/'+p;}
+function loadRoboflow(){
+  var url=document.getElementById('rfUrl').value.trim(),key=document.getElementById('rfKey').value.trim();
+  if(!url||!key){setRFS('error','Enter URL and API key');return;}
+  var parts=url.replace('https://detect.roboflow.com/','').split('/');
+  rfInfo={id:parts[0],version:parts[1]||'1'};rfKey=key;activeModelType='roboflow';
+  setRFS('ok','Active: '+rfInfo.id);
+}
+function setRFS(t,m){var el=document.getElementById('rfStatus');el.className='status-msg '+t;el.textContent=m;}
+function rfDetect(){
+  if(!rfInfo)return Promise.resolve([]);
+  var c=document.createElement('canvas');c.width=video.videoWidth||640;c.height=video.videoHeight||480;c.getContext('2d').drawImage(video,0,0);
+  return fetch('https://detect.roboflow.com/'+rfInfo.id+'/'+rfInfo.version+'?api_key='+rfKey,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:c.toDataURL('image/jpeg',0.7).split(',')[1]}).then(function(r){return r.json();}).then(function(d){if(!d.predictions)return[];return d.predictions.map(function(p){return{bbox:[p.x-p.width/2,p.y-p.height/2,p.width,p.height],class:p.class,score:p.confidence};});}).catch(function(){return[];});
+}
+
+// Custom model
+var customModelObj=null,customLabels=[],customFiles={};
+function fileLoaded(t,input){customFiles[t]=input.files;var n=Array.from(input.files).map(function(f){return f.name;}).join(', ');var ids={json:'lJson',weights:'lWeights',labels:'lLabels'};document.getElementById(ids[t]).textContent='✅ '+n;document.getElementById(ids[t]).classList.add('loaded');}
+function loadCustomModel(){
+  if(!customFiles.json){alert('Select model.json');return;}
+  if(customFiles.labels){var lr=new FileReader();lr.onload=function(e){try{customLabels=JSON.parse(e.target.result);}catch(x){customLabels=e.target.result.split('\n').map(function(s){return s.trim();}).filter(Boolean);}};lr.readAsText(customFiles.labels[0]);}
+  tf.loadGraphModel(URL.createObjectURL(customFiles.json[0])).then(function(m){customModelObj=m;activeModelType='custom';alert('Model loaded! Go to Live tab.');}).catch(function(e){alert('Failed: '+e.message);});
+}
+function customDetect(){
+  if(!customModelObj)return Promise.resolve([]);
+  try{
+    var t=tf.browser.fromPixels(video).resizeBilinear([640,640]).expandDims(0).div(255.0);
+    var r=customModelObj.predict(t);t.dispose();
+    return r.array().then(function(arr){
+      var vW=video.videoWidth||640,vH=video.videoHeight||480;
+      return(arr[0]||[]).filter(function(p){return p[4]>0.3;}).map(function(p){
+        return{bbox:[p[0]*vW,p[1]*vH,(p[2]-p[0])*vW,(p[3]-p[1])*vH],class:customLabels[Math.round(p[5])]||'obj',score:p[4]};
+      });
+    });
+  }catch(e){return Promise.resolve([]);}
+}
+</script>
+</body>
+</html>
+#modeBar.show { display: flex; }
+.mbtn {
+  flex: 1; padding: 10px 4px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(0,0,0,0.6); color: #555;
+  font-family: 'Courier New', monospace; font-size: 11px;
+  text-align: center; cursor: pointer;
+}
+.mbtn.on { border-color: #00ffcc; background: rgba(0,255,204,0.12); color: #00ffcc; }
+.mbtn span { font-size: 18px; display: block; margin-bottom: 3px; }
+
+#drawLayer {
+  position: fixed; inset: 0; z-index: 10;
+  touch-action: none; pointer-events: none;
+}
 </style>
 </head>
 <body>
